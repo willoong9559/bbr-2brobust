@@ -40,6 +40,7 @@ sudo ./install-2brobust.sh --verify
 - 必须在要安装的 **正在运行的** 内核上执行。脚本从 `uname -r` 自动提取上游版本，例如 `6.12.94-amd64` 会使用 `6.12.94` 源码。非标准版本可明确指定：`sudo env KERNEL_VERSION=6.12.94 ./install-2brobust.sh`。
 - 对于发行版内核的 ABI 后缀，例如 `6.12.95+deb12-amd64`，脚本会使用 `6.12.95` 上游源码，并自动写入 Linux 构建系统的 `localversion.2brobust`，以确保生成模块的 vermagic 与正在运行的内核完全一致。
 - `/lib/modules/$(uname -r)/build` 必须是与当前内核精确匹配的、已配置的 build tree，至少包含 `.config`；若启用了 `CONFIG_MODVERSIONS`，还必须包含 `Module.symvers`。默认流程会尝试通过 APT 安装 `linux-headers-$(uname -r)`；若你的内核来自自定义仓库，须先在该仓库提供相同版本的 headers。这正是模块 ABI 匹配所需的信息。
+- 脚本在执行 `modules_prepare` 后会再次从上述 build tree 复制 `Module.symvers`，供 `modpost` 校验内核导出符号与 CRC；不会通过忽略未解析符号来强制生成模块。
 - 补丁先做 dry-run：只要目标内核的 BBRv1 源码与官方补丁不兼容，脚本就会在编译或安装前停止，不会生成或加载不匹配的模块。
 - Linux 源码大小取决于当前版本；编译还需要额外磁盘空间和内存。
 - 如果当前有 BBR TCP 连接（包括使用 BBR 的 SSH 会话），`tcp_bbr` 可能无法卸载。脚本会恢复原来的运行时默认拥塞控制、保留已安装的新模块而不会覆盖原模块，并以退出码 `2` 结束；关闭相关连接后重跑，或重启后执行 `sudo ./install-2brobust.sh --verify`。

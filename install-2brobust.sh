@@ -205,6 +205,11 @@ build_module() {
     jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')"
     log "Preparing the kernel build tree and compiling tcp_bbr.ko with ${jobs} job(s)."
     make -C "$SRC" -j"$jobs" prepare modules_prepare
+    if [[ -r "$KDIR/Module.symvers" ]]; then
+        # modules_prepare does not create a complete Module.symvers.  Restore
+        # the matching running-kernel symbol CRCs immediately before modpost.
+        cp "$KDIR/Module.symvers" "$SRC/Module.symvers"
+    fi
     make -C "$SRC" -j"$jobs" net/ipv4/tcp_bbr.ko
     [[ -f "$SRC/net/ipv4/tcp_bbr.ko" ]] || die "Build completed without tcp_bbr.ko."
 
