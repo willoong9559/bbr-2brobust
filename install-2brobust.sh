@@ -176,8 +176,23 @@ prepare_source() {
     grep -qx 'CONFIG_TCP_CONG_BBR=m' "$SRC/.config" || die \
         "The kernel configuration did not retain CONFIG_TCP_CONG_BBR=m."
 
-    local built_release
+    local built_release release_suffix
     built_release="$(make -s -C "$SRC" kernelrelease)"
+    if [[ "$built_release" != "$KERNEL_RELEASE" ]]; then
+        [[ "$KERNEL_RELEASE" == "${KERNEL_VERSION}"* ]] || die \
+            "Running kernel release ${KERNEL_RELEASE} does not start with source version ${KERNEL_VERSION}."
+        release_suffix="${KERNEL_RELEASE#"$KERNEL_VERSION"}"
+        [[ -n "$release_suffix" ]] || die \
+            "Source generated ${built_release}, not ${KERNEL_RELEASE}, but no release suffix can be derived."
+
+        # Distribution kernels commonly append an ABI suffix (for example,
+        # +deb12-amd64).  Preserve it so module vermagic matches uname -r.
+        log "Applying running-kernel ABI suffix ${release_suffix} to the source configuration."
+        "$SRC/scripts/config" --file "$SRC/.config" --set-str LOCALVERSION "$release_suffix"
+        "$SRC/scripts/config" --file "$SRC/.config" --disable LOCALVERSION_AUTO
+        make -s -C "$SRC" olddefconfig
+        built_release="$(make -s -C "$SRC" kernelrelease)"
+    fi
     [[ "$built_release" == "$KERNEL_RELEASE" ]] || die \
         "Source configuration produces kernel release ${built_release}, expected ${KERNEL_RELEASE}."
 }
