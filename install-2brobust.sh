@@ -108,12 +108,16 @@ install_dependencies() {
 }
 
 require_build_tree() {
+    local header_release
     KDIR="/lib/modules/${KERNEL_RELEASE}/build"
     [[ -d "$KDIR" ]] || die "Missing ${KDIR}. Install or provide the matching kernel headers/build tree first."
     [[ -r "$KDIR/.config" ]] || die "Missing ${KDIR}/.config; a configured matching build tree is required."
-    if grep -qx 'CONFIG_MODVERSIONS=y' "$KDIR/.config" && [[ ! -r "$KDIR/Module.symvers" ]]; then
-        die "${KDIR}/Module.symvers is required because CONFIG_MODVERSIONS=y."
-    fi
+    [[ -r "$KDIR/Module.symvers" ]] || die "Missing ${KDIR}/Module.symvers; a complete matching kernel build tree is required."
+    grep -qx 'CONFIG_TCP_CONG_BBR=m' "$KDIR/.config" || die \
+        "${KDIR}/.config does not have CONFIG_TCP_CONG_BBR=m; this installer replaces a modular BBRv1 only."
+    header_release="$(make -s -C "$KDIR" kernelrelease)"
+    [[ "$header_release" == "$KERNEL_RELEASE" ]] || die \
+        "Header build tree reports ${header_release}, expected ${KERNEL_RELEASE}."
 }
 
 verify_sha256() {
@@ -162,59 +166,26 @@ prepare_source() {
     patch --dry-run --batch --forward -p1 --directory "$SRC" < "$PATCH_FILE"
     patch --batch --forward -p1 --directory "$SRC" < "$PATCH_FILE"
     grep -Fq 'Register BBRv1 patch.' "$SRC/net/ipv4/tcp_bbr.c" || die "Patch marker is absent after applying the patch."
-
-    # Reuse the running kernel configuration and its exported symbol CRCs.
-    cp "$KDIR/.config" "$SRC/.config"
-    if [[ -r "$KDIR/Module.symvers" ]]; then
-        cp "$KDIR/Module.symvers" "$SRC/Module.symvers"
-    fi
-
-    log "Configuring BBR as a loadable module."
-    make -s -C "$SRC" olddefconfig
-    "$SRC/scripts/config" --file "$SRC/.config" --module TCP_CONG_BBR
-    make -s -C "$SRC" olddefconfig
-    grep -qx 'CONFIG_TCP_CONG_BBR=m' "$SRC/.config" || die \
-        "The kernel configuration did not retain CONFIG_TCP_CONG_BBR=m."
-
-    local built_release release_suffix
-    built_release="$(make -s -C "$SRC" kernelrelease)"
-    if [[ "$built_release" != "$KERNEL_RELEASE" ]]; then
-        [[ "$KERNEL_RELEASE" == "${KERNEL_VERSION}"* ]] || die \
-            "Running kernel release ${KERNEL_RELEASE} does not start with source version ${KERNEL_VERSION}."
-        release_suffix="${KERNEL_RELEASE#"$KERNEL_VERSION"}"
-        [[ -n "$release_suffix" ]] || die \
-            "Source generated ${built_release}, not ${KERNEL_RELEASE}, but no release suffix can be derived."
-
-        # Distribution kernels commonly append an ABI suffix (for example,
-        # +deb12-amd64).  localversion.* is consumed directly by the kernel
-        # build system, unlike a copied distribution .config whose generated
-        # configuration files can retain an older LOCALVERSION value.
-        log "Applying running-kernel ABI suffix ${release_suffix} to the source configuration."
-        "$SRC/scripts/config" --file "$SRC/.config" --set-str LOCALVERSION ""
-        "$SRC/scripts/config" --file "$SRC/.config" --disable LOCALVERSION_AUTO
-        printf '%s\n' "$release_suffix" > "$SRC/localversion.2brobust"
-        make -s -C "$SRC" olddefconfig
-        built_release="$(make -s -C "$SRC" kernelrelease)"
-    fi
-    [[ "$built_release" == "$KERNEL_RELEASE" ]] || die \
-        "Source configuration produces kernel release ${built_release}, expected ${KERNEL_RELEASE}."
 }
 
 build_module() {
     local jobs
     jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')"
-    log "Preparing the kernel build tree and compiling tcp_bbr.ko with ${jobs} job(s)."
-    make -C "$SRC" -j"$jobs" prepare modules_prepare
-    if [[ -r "$KDIR/Module.symvers" ]]; then
-        # modules_prepare does not create a complete Module.symvers.  Restore
-        # the matching running-kernel symbol CRCs immediately before modpost.
-        cp "$KDIR/Module.symvers" "$SRC/Module.symvers"
-    fi
-    make -C "$SRC" -j"$jobs" net/ipv4/tcp_bbr.ko
-    [[ -f "$SRC/net/ipv4/tcp_bbr.ko" ]] || die "Build completed without tcp_bbr.ko."
+    MODULE_DIR="$BUILD_DIR/module"
+    MODULE_KO="$MODULE_DIR/tcp_bbr.ko"
+    mkdir -p "$MODULE_DIR"
+    cp "$SRC/net/ipv4/tcp_bbr.c" "$MODULE_DIR/tcp_bbr.c"
+    printf 'obj-m := tcp_bbr.o\n' > "$MODULE_DIR/Makefile"
+
+    # Build as an external module against the running kernel's build tree.
+    # This makes modpost consume KDIR/Module.symvers and preserves the exact
+    # distribution ABI suffix in vermagic.
+    log "Compiling tcp_bbr.ko against the running kernel build tree with ${jobs} job(s)."
+    make -C "$KDIR" M="$MODULE_DIR" -j"$jobs" modules
+    [[ -f "$MODULE_KO" ]] || die "Build completed without tcp_bbr.ko."
 
     local vermagic
-    vermagic="$(modinfo -F vermagic "$SRC/net/ipv4/tcp_bbr.ko")"
+    vermagic="$(modinfo -F vermagic "$MODULE_KO")"
     [[ "$vermagic" == "$KERNEL_RELEASE"* ]] || die \
         "Built module vermagic (${vermagic}) does not start with ${KERNEL_RELEASE}."
 }
@@ -222,7 +193,7 @@ build_module() {
 install_module() {
     local destination="/lib/modules/${KERNEL_RELEASE}/${MODULE_RELATIVE_PATH}"
     log "Installing the patched module to ${destination}."
-    install -D -m 0644 "$SRC/net/ipv4/tcp_bbr.ko" "$destination"
+    install -D -m 0644 "$MODULE_KO" "$destination"
     depmod -a "$KERNEL_RELEASE"
 
     local resolved
