@@ -16,7 +16,7 @@ sudo ./install-2brobust.sh
 安装脚本会：
 
 1. 检查正在运行的内核，并检查 `/lib/modules/$(uname -r)/build` 里有对应的配置和符号版本信息。
-2. 安装所需的构建依赖（默认使用 `apt-get`；其他发行版可自行准备依赖后加 `--skip-deps`）。
+2. 安装所需的构建依赖；若缺少 `/lib/modules/$(uname -r)/build`，会自动安装精确匹配的 `linux-headers-$(uname -r)`（默认使用 `apt-get`；其他发行版可自行准备依赖后加 `--skip-deps`）。
 3. 从作者官方仓库下载固定提交 `8055052d8d7770fd20f4e0db1182c9ea975398c4` 的 `patches/bbr1.patch`，并用内置 SHA-256 校验其内容。
 4. 从 `uname -r` 自动提取数字内核版本并从 kernel.org 下载相应源码；先取得 kernel.org 的官方 SHA-256 清单，再校验下载内容。
 5. 对源码先做补丁 dry-run，再应用补丁；复用正在运行内核的 `.config` 和 `Module.symvers`，将 `CONFIG_TCP_CONG_BBR=m` 编译为模块。
@@ -38,7 +38,7 @@ sudo ./install-2brobust.sh --verify
 ## 前置条件与限制
 
 - 必须在要安装的 **正在运行的** 内核上执行。脚本从 `uname -r` 自动提取上游版本，例如 `6.12.94-amd64` 会使用 `6.12.94` 源码。非标准版本可明确指定：`sudo env KERNEL_VERSION=6.12.94 ./install-2brobust.sh`。
-- `/lib/modules/$(uname -r)/build` 必须是与当前内核精确匹配的、已配置的 build tree，至少包含 `.config`；若启用了 `CONFIG_MODVERSIONS`，还必须包含 `Module.symvers`。这正是模块 ABI 匹配所需的信息。
+- `/lib/modules/$(uname -r)/build` 必须是与当前内核精确匹配的、已配置的 build tree，至少包含 `.config`；若启用了 `CONFIG_MODVERSIONS`，还必须包含 `Module.symvers`。默认流程会尝试通过 APT 安装 `linux-headers-$(uname -r)`；若你的内核来自自定义仓库，须先在该仓库提供相同版本的 headers。这正是模块 ABI 匹配所需的信息。
 - 补丁先做 dry-run：只要目标内核的 BBRv1 源码与官方补丁不兼容，脚本就会在编译或安装前停止，不会生成或加载不匹配的模块。
 - Linux 源码大小取决于当前版本；编译还需要额外磁盘空间和内存。
 - 如果当前有 BBR TCP 连接（包括使用 BBR 的 SSH 会话），`tcp_bbr` 可能无法卸载。脚本会恢复原来的运行时默认拥塞控制、保留已安装的新模块而不会覆盖原模块，并以退出码 `2` 结束；关闭相关连接后重跑，或重启后执行 `sudo ./install-2brobust.sh --verify`。

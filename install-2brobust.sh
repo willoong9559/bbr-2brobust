@@ -90,14 +90,21 @@ derive_kernel_source() {
 }
 
 install_dependencies() {
+    local -a packages
     (( SKIP_DEPS == 1 )) && return
     command -v apt-get >/dev/null 2>&1 || die "This Debian installer requires apt-get; use --skip-deps if dependencies are already present."
     log "Installing build prerequisites."
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
-    apt-get install -y --no-install-recommends \
+    packages=(
         bc bison build-essential ca-certificates curl flex kmod libelf-dev libssl-dev \
         pahole patch rsync xz-utils
+    )
+    if [[ ! -d "/lib/modules/${KERNEL_RELEASE}/build" ]]; then
+        log "Installing headers matching the running kernel: linux-headers-${KERNEL_RELEASE}."
+        packages+=("linux-headers-${KERNEL_RELEASE}")
+    fi
+    apt-get install -y --no-install-recommends "${packages[@]}"
 }
 
 require_build_tree() {
