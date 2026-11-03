@@ -186,10 +186,13 @@ prepare_source() {
             "Source generated ${built_release}, not ${KERNEL_RELEASE}, but no release suffix can be derived."
 
         # Distribution kernels commonly append an ABI suffix (for example,
-        # +deb12-amd64).  Preserve it so module vermagic matches uname -r.
+        # +deb12-amd64).  localversion.* is consumed directly by the kernel
+        # build system, unlike a copied distribution .config whose generated
+        # configuration files can retain an older LOCALVERSION value.
         log "Applying running-kernel ABI suffix ${release_suffix} to the source configuration."
-        "$SRC/scripts/config" --file "$SRC/.config" --set-str LOCALVERSION "$release_suffix"
+        "$SRC/scripts/config" --file "$SRC/.config" --set-str LOCALVERSION ""
         "$SRC/scripts/config" --file "$SRC/.config" --disable LOCALVERSION_AUTO
+        printf '%s\n' "$release_suffix" > "$SRC/localversion.2brobust"
         make -s -C "$SRC" olddefconfig
         built_release="$(make -s -C "$SRC" kernelrelease)"
     fi
