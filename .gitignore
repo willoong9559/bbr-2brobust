@@ -1,0 +1,4 @@
+# Local build/cache overrides
+.cache/
+*.ko
+*.tmp
