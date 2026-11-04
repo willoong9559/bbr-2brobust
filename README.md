@@ -1,6 +1,6 @@
 # 2BRobust BBRv1 模块安装器
 
-推荐在 **Debian 12** 上使用本仓库。它提供一个针对正在运行内核且 BBRv1 可编译为模块的安装脚本：脚本会自动检测 `uname -r`，下载并校验对应的上游 Linux 源码，再下载、校验并应用 [2BRobust 作者官方仓库](https://github.com/sys-uos/bbr-cpu-contention) 的 BBRv1 补丁，最后在本机编译 `tcp_bbr.ko`，以可回退的模块更新方式安装、加载和验证。
+推荐在 **Ubuntu 20.04** 上使用本仓库。它提供一个针对正在运行内核且 BBRv1 可编译为模块的安装脚本：脚本会自动检测 `uname -r`，下载并校验对应的上游 Linux 源码，再下载、校验并应用 [2BRobust 作者官方仓库](https://github.com/sys-uos/bbr-cpu-contention) 的 BBRv1 补丁，最后在本机编译 `tcp_bbr.ko`，以可回退的模块更新方式安装、加载和验证。
 
 它使用论文《2BRobust — Mitigating TCP BBR Performance Degradation in Virtual Machines under CPU Contention》提供的官方 BBRv1 补丁。
 
