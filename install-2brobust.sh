@@ -98,8 +98,16 @@ install_dependencies() {
     apt-get update
     packages=(
         bc bison build-essential ca-certificates curl flex kmod libelf-dev libssl-dev \
-        pahole patch rsync xz-utils
+        patch rsync xz-utils
     )
+    source /etc/os-release
+
+    if [[ "$ID" == "ubuntu" && "$VERSION_ID" == "20.04" ]]; then
+        packages+=(dwarves)
+    else
+        packages+=(pahole)
+    fi
+
     if [[ ! -d "/lib/modules/${KERNEL_RELEASE}/build" ]]; then
         log "Installing headers matching the running kernel: linux-headers-${KERNEL_RELEASE}."
         packages+=("linux-headers-${KERNEL_RELEASE}")
