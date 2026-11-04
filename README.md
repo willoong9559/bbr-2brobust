@@ -6,7 +6,7 @@
 
 ## 使用方式
 
-在 Debian 12 目标主机上克隆本仓库后运行：
+在 Ubuntu 20.04 目标主机上克隆本仓库后运行：
 
 ```bash
 chmod +x install-2brobust.sh
